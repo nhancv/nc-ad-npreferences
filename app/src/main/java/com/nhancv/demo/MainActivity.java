@@ -21,19 +21,24 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         new NPreferences.Builder(this).withEncryptionPassword(ENCRYPT_KEY).build();
 
+        //Enable log output
+        NPreferences.getInstance().setDebug(true);
+
         //Commit value
         NPreferences.getInstance().edit()
                 .putString(TEST_KEY_VALUE_STRING, "testString")
                 .putFloat(TEST_KEY_VALUE_FLOAT, 1.5f)
                 .putLong(TEST_KEY_VALUE_LONG, 10L)
-                .putBoolean(TEST_KEY_VALUE_BOOLEAN, false)
-                .apply();
+                .putBoolean(TEST_KEY_VALUE_BOOLEAN, false);
 
         //Read values
         Log.d("MainActivity", TEST_KEY_VALUE_STRING + " => " + NPreferences.getInstance().getString(TEST_KEY_VALUE_STRING, TEST_KEY_VALUE_STRING));
         Log.d("MainActivity", TEST_KEY_VALUE_FLOAT + " => " + NPreferences.getInstance().getFloat(TEST_KEY_VALUE_FLOAT, 0));
         Log.d("MainActivity", TEST_KEY_VALUE_LONG + " => " + NPreferences.getInstance().getLong(TEST_KEY_VALUE_LONG, 0));
         Log.d("MainActivity", TEST_KEY_VALUE_BOOLEAN + " => " + NPreferences.getInstance().getBoolean(TEST_KEY_VALUE_BOOLEAN, true));
+
+        //Clear data
+        NPreferences.getInstance().edit().clear();
 
         //Call utils example
         utilsExample();

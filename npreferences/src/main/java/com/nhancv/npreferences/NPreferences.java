@@ -19,7 +19,7 @@ public class NPreferences {
     private final String cryptoKey;
     private final EncryptedEditor encryptedEditor;
     private final Utils utils;
-
+    private boolean isDebug;
     private NPreferences(Builder builder) {
         this.sharedPreferences = TextUtils.isEmpty(builder.prefsName) ? PreferenceManager.getDefaultSharedPreferences(builder.context) : builder.context
                 .getSharedPreferences(
@@ -43,7 +43,7 @@ public class NPreferences {
     }
 
     private synchronized void log(String logMessage) {
-        if (BuildConfig.DEBUG) {
+        if (isDebug()) {
             Log.d(TAG, logMessage);
         }
     }
@@ -139,6 +139,14 @@ public class NPreferences {
         } else {
             return defaultType;
         }
+    }
+
+    public boolean isDebug() {
+        return isDebug;
+    }
+
+    public void setDebug(boolean debug) {
+        isDebug = debug;
     }
 
     /**
@@ -317,8 +325,7 @@ public class NPreferences {
     }
 
     /**
-     * Class used for modifying values in a {@link NPreferences} object. All changes you make in an editor are batched, and not copied back to the
-     * original {@link NPreferences} until you call {@link EncryptedEditor#apply()}.
+     * Class used for modifying values in a {@link NPreferences} object.
      */
     public final class EncryptedEditor {
 
@@ -330,7 +337,7 @@ public class NPreferences {
         }
 
         private synchronized void log(String logMessage) {
-            if (BuildConfig.DEBUG) {
+            if (NPreferences.isDebug()) {
                 Log.d(TAG, logMessage);
             }
         }
@@ -347,7 +354,7 @@ public class NPreferences {
 
         private void putValue(String key, String value) {
             log("putValue() => " + key + " [" + encryptValue(key) + "] || " + value + " [" + encryptValue(value) + "]");
-            editor().putString(encryptValue(key), encryptValue(value)).apply();
+            editor().putString(encryptValue(key), encryptValue(value)).commit();
         }
 
         /**
@@ -420,7 +427,7 @@ public class NPreferences {
             String encKey = encryptValue(key);
             if (containsEncryptedKey(encKey)) {
                 log("remove() => " + key + " [ " + encKey + " ]");
-                editor().remove(encKey);
+                editor().remove(encKey).commit();
             }
             return this;
         }
@@ -433,17 +440,8 @@ public class NPreferences {
          */
         public EncryptedEditor clear() {
             log("clear() => clearing preferences.");
-            editor().clear();
+            editor().clear().commit();
             return this;
-        }
-
-        /**
-         * Commit your preferences changes back from this Editor to the {@link NPreferences} object it is editing. This atomically performs the
-         * requested
-         * modifications, replacing whatever is currently in the {@link NPreferences}.
-         */
-        public void apply() {
-            editor().apply();
         }
 
     }
