@@ -6,6 +6,7 @@ import android.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.util.Log;
 
+import java.lang.ref.WeakReference;
 import java.security.GeneralSecurityException;
 
 /**
@@ -14,32 +15,154 @@ import java.security.GeneralSecurityException;
 public class NPreferences {
 
     private static final String TAG = NPreferences.class.getSimpleName();
-    private static NPreferences instance;
-    private final SharedPreferences sharedPreferences;
-    private final String cryptoKey;
-    private final EncryptedEditor encryptedEditor;
-    private final Utils utils;
+
+    private String cryptoKey;
+    private Utils utils;
+    private EncryptedEditor encryptedEditor;
+    private SharedPreferences sharedPreferences;
     private boolean isDebug;
-    private NPreferences(Builder builder) {
-        this.sharedPreferences = TextUtils.isEmpty(builder.prefsName) ? PreferenceManager.getDefaultSharedPreferences(builder.context) : builder.context
-                .getSharedPreferences(
-                        builder.prefsName,
-                        0);
-        this.cryptoKey = TextUtils.isEmpty(builder.encryptionPassword) ? generateEncryptionString(builder.context) : builder.encryptionPassword;
-        this.encryptedEditor = new EncryptedEditor(this);
+
+    private WeakReference<Context> context;
+
+    private NPreferences() {
         this.utils = new Utils(this);
     }
 
-    /**
-     * Retrieve an {@link NPreferences} instance with all default settings.
-     *
-     * @return default {@link NPreferences}
-     */
     public static NPreferences getInstance() {
-        if (instance == null) {
-            throw new NullPointerException("NPreferences instance is null, it should be created by Builder");
-        }
-        return instance;
+        return SingletonHelper.INSTANCE;
+    }
+
+    public static void init(Context context) {
+        init("prefsName", context);
+    }
+
+    public static void init(Context context, String encryptedKey) {
+        init("prefsName", context, encryptedKey);
+    }
+
+    public static void init(String prefsName, Context context) {
+        init(prefsName, context, null);
+    }
+
+    public static void init(String prefsName, Context context, String encryptedKey) {
+        getInstance().context = new WeakReference<>(context);
+
+        getInstance().sharedPreferences = TextUtils.isEmpty(prefsName) ?
+                PreferenceManager.getDefaultSharedPreferences(context) :
+                context.getSharedPreferences(prefsName, 0);
+        getInstance().initEncryptedEditor();
+        if (!TextUtils.isEmpty(encryptedKey)) withEncryptionPassword(encryptedKey);
+    }
+
+    private static void withEncryptionPassword(String encryptionPassword) {
+        getInstance().initCryptoKey(encryptionPassword);
+    }
+
+    /**
+     * Retrieve an int value from the preferences.
+     *
+     * @param key          - The name of the preference to retrieve
+     * @param defaultValue - Value to return if this preference does not exist
+     * @return int - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not an
+     * int.
+     */
+    public static int getInt(String key, int defaultValue) {
+        return (Integer) getInstance().decryptType(key, 0, defaultValue);
+    }
+
+    /**
+     * Retrieve a long value from the preferences.
+     *
+     * @param key          - The name of the preference to retrieve
+     * @param defaultValue - Value to return if this preference does not exist
+     * @return long - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not a
+     * long
+     */
+    public static long getLong(String key, long defaultValue) {
+        return (Long) getInstance().decryptType(key, 0L, defaultValue);
+    }
+
+    /**
+     * Retrieve a boolean value from the preferences
+     *
+     * @param key          - The name of the preference to retrieve
+     * @param defaultValue - Value to return if this preference does not exist
+     * @return - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not a
+     * boolean
+     */
+    public static boolean getBoolean(String key, boolean defaultValue) {
+        return (Boolean) getInstance().decryptType(key, defaultValue, defaultValue);
+    }
+
+    /**
+     * Retrieve a float value from the preferences
+     *
+     * @param key          - The name of the preference to retrieve
+     * @param defaultValue - Value to return if this preference does not exist
+     * @return float - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not a
+     * float
+     */
+    public static float getFloat(String key, float defaultValue) {
+        return (Float) getInstance().decryptType(key, 0f, defaultValue);
+    }
+
+    /**
+     * Retrieve a String value from the preferences
+     *
+     * @param key          - The name of the preference to retrieve
+     * @param defaultValue - Value to return if this preference does not exist
+     * @return String - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not
+     * a String
+     */
+    public static String getString(String key, String defaultValue) {
+        return (String) getInstance().decryptType(key, "", defaultValue);
+    }
+
+    /**
+     * Checks whether the preferences contains a preference.
+     *
+     * @param key - The name of the preference to check
+     * @return Returns true if the preference exists in the preferences, otherwise false.
+     */
+    public static boolean contains(String key) {
+        String encKey = getInstance().encryptString(key);
+        return getInstance().sharedPreferences.contains(encKey);
+    }
+
+    /**
+     * Get the Editor for these preferences, through which you can make modifications to the data in the preferences and atomically commit those changes
+     * back to
+     * the SharedPreferences object.
+     *
+     * @return {@link EncryptedEditor}
+     */
+    public static EncryptedEditor edit() {
+        return getInstance().encryptedEditor;
+    }
+
+    /**
+     * Get the {@link Utils} instance for this preferences configuration.
+     *
+     * @return The {@link Utils} instance for this preferences configuration.
+     */
+    public static Utils getUtils() {
+        return getInstance().utils;
+    }
+
+    public boolean isDebug() {
+        return isDebug;
+    }
+
+    public static void setDebug(boolean debug) {
+        getInstance().isDebug = debug;
+    }
+
+    private void initEncryptedEditor() {
+        encryptedEditor = new EncryptedEditor(this);
+    }
+
+    private void initCryptoKey(String encryptionPassword) {
+        cryptoKey = TextUtils.isEmpty(encryptionPassword) ? generateEncryptionString(context.get()) : encryptionPassword;
     }
 
     private synchronized void log(String logMessage) {
@@ -141,154 +264,8 @@ public class NPreferences {
         }
     }
 
-    public boolean isDebug() {
-        return isDebug;
-    }
-
-    public void setDebug(boolean debug) {
-        isDebug = debug;
-    }
-
-    /**
-     * Retrieve an int value from the preferences.
-     *
-     * @param key          - The name of the preference to retrieve
-     * @param defaultValue - Value to return if this preference does not exist
-     * @return int - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not an
-     * int.
-     */
-    public int getInt(String key, int defaultValue) {
-        return (Integer) decryptType(key, 0, defaultValue);
-    }
-
-    /**
-     * Retrieve a long value from the preferences.
-     *
-     * @param key          - The name of the preference to retrieve
-     * @param defaultValue - Value to return if this preference does not exist
-     * @return long - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not a
-     * long
-     */
-    public long getLong(String key, long defaultValue) {
-        return (Long) decryptType(key, 0L, defaultValue);
-    }
-
-    /**
-     * Retrieve a boolean value from the preferences
-     *
-     * @param key          - The name of the preference to retrieve
-     * @param defaultValue - Value to return if this preference does not exist
-     * @return - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not a
-     * boolean
-     */
-    public boolean getBoolean(String key, boolean defaultValue) {
-        return (Boolean) decryptType(key, defaultValue, defaultValue);
-    }
-
-    /**
-     * Retrieve a float value from the preferences
-     *
-     * @param key          - The name of the preference to retrieve
-     * @param defaultValue - Value to return if this preference does not exist
-     * @return float - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not a
-     * float
-     */
-    public float getFloat(String key, float defaultValue) {
-        return (Float) decryptType(key, 0f, defaultValue);
-    }
-
-    /**
-     * Retrieve a String value from the preferences
-     *
-     * @param key          - The name of the preference to retrieve
-     * @param defaultValue - Value to return if this preference does not exist
-     * @return String - Returns the preference value if it exists, or defValue. Throws ClassCastException if there is a preference with this name that is not
-     * a String
-     */
-    public String getString(String key, String defaultValue) {
-        return (String) decryptType(key, "", defaultValue);
-    }
-
-    /**
-     * Checks whether the preferences contains a preference.
-     *
-     * @param key - The name of the preference to check
-     * @return Returns true if the preference exists in the preferences, otherwise false.
-     */
-    public boolean contains(String key) {
-        String encKey = encryptString(key);
-        return sharedPreferences.contains(encKey);
-    }
-
-    /**
-     * Get the Editor for these preferences, through which you can make modifications to the data in the preferences and atomically commit those changes
-     * back to
-     * the SharedPreferences object.
-     *
-     * @return {@link EncryptedEditor}
-     */
-    public EncryptedEditor edit() {
-        return encryptedEditor;
-    }
-
-    /**
-     * Get the {@link Utils} instance for this NPreferences configuration.
-     *
-     * @return The {@link Utils} instance for this NPreferences configuration.
-     */
-    public Utils getUtils() {
-        return utils;
-    }
-
-    /**
-     * Class for configuring a new {@link NPreferences} instance.
-     */
-    public static final class Builder {
-
-        private final Context context;
-        private String encryptionPassword;
-        private String prefsName;
-
-        /**
-         * The Builder's constructor
-         *
-         * @param context
-         */
-        public Builder(Context context) {
-            this.context = context.getApplicationContext();
-        }
-
-        /**
-         * Specify the encryption password which should be used when reading and writing values to preferences.
-         *
-         * @param encryptionPassword - The encryption password which should be used when reading and writing values
-         * @return
-         */
-        public Builder withEncryptionPassword(String encryptionPassword) {
-            this.encryptionPassword = encryptionPassword;
-            return this;
-        }
-
-        /**
-         * Specify the name of the SharedPreferences instance which should be used to read and write values to.
-         *
-         * @param preferenceName - The name which will be used as SharedPreferences instance.
-         * @return
-         */
-        public Builder withPreferenceName(String preferenceName) {
-            this.prefsName = preferenceName;
-            return this;
-        }
-
-        /**
-         * Build a new {@link NPreferences} instance with the specified configuration.
-         *
-         * @return A new {@link NPreferences} instance with the specified configuration
-         */
-        public NPreferences build() {
-            return instance = new NPreferences(this);
-        }
-
+    private static class SingletonHelper {
+        private static final NPreferences INSTANCE = new NPreferences();
     }
 
     /**
@@ -330,24 +307,24 @@ public class NPreferences {
     public final class EncryptedEditor {
 
         private final String TAG = EncryptedEditor.class.getSimpleName();
-        private final NPreferences NPreferences;
+        private final NPreferences preferences;
 
         private EncryptedEditor(NPreferences NPreferences) {
-            this.NPreferences = NPreferences;
+            this.preferences = NPreferences;
         }
 
         private synchronized void log(String logMessage) {
-            if (NPreferences.isDebug()) {
+            if (preferences.isDebug()) {
                 Log.d(TAG, logMessage);
             }
         }
 
         private SharedPreferences.Editor editor() {
-            return NPreferences.sharedPreferences.edit();
+            return preferences.sharedPreferences.edit();
         }
 
         private String encryptValue(String value) {
-            String encryptedString = NPreferences.encryptString(value);
+            String encryptedString = preferences.encryptString(value);
             log("encryptValue() => " + encryptedString);
             return encryptedString;
         }
